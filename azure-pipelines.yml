@@ -32,7 +32,7 @@ stages:
           $output = terraform apply -auto-approve 2>&1
           $exitCode = $LASTEXITCODE
 
-          # エラーメッセージ短縮（最大500文字）
+          # エラーメッセージ短縮
           $escaped = $output -replace "`r`n", "\n" -replace "`n", "\n" -replace "`r", ""
           $truncated = $escaped.Substring(0, [Math]::Min(500, $escaped.Length))
           Write-Host "##vso[task.setvariable variable=TF_ERROR_OUTPUT]$truncated"
@@ -81,7 +81,7 @@ stages:
             exit 1
           }
 
-          $errorOutput = "${env:TF_ERROR_OUTPUT}"
+          $errorOutput = $env:TF_ERROR_OUTPUT
           if (-not $errorOutput) {
             $errorOutput = "エラー出力が取得できませんでした。"
           }
