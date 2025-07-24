@@ -29,10 +29,10 @@ stages:
           cd terraform
           terraform init
 
-          # 一時ファイルに出力をリダイレクト（出力 + エラー）
           $tempFile = "$env:AGENT_TEMPDIRECTORY\tf_output.log"
           if (Test-Path $tempFile) { Remove-Item $tempFile -Force }
 
+          echo "=== Terraform Apply 実行中 ==="
           Start-Process -FilePath "terraform" `
                         -ArgumentList "apply", "-auto-approve" `
                         -RedirectStandardOutput $tempFile `
@@ -40,13 +40,26 @@ stages:
                         -NoNewWindow -Wait
           $exitCode = $LASTEXITCODE
 
-          # ファイルから出力を取得
-          $output = Get-Content $tempFile -Raw
-          Remove-Item $tempFile -Force
+          echo "=== Terraform Apply 終了（ExitCode: $exitCode） ==="
+          echo "=== 出力ファイル存在確認 ==="
+          if (Test-Path $tempFile) {
+            echo "出力ファイルあり：$tempFile"
+            $output = Get-Content $tempFile -Raw
+            echo "=== ファイル読み取り完了 ==="
+            echo "▼ RAW出力（最初の500文字）▼"
+            echo $output.Substring(0, [Math]::Min(500, $output.Length))
+          } else {
+            echo "❌ 出力ファイルが存在しません"
+            $output = ""
+          }
 
-          # エスケープ処理と短縮（Slack用）
+          Remove-Item $tempFile -Force -ErrorAction SilentlyContinue
+
           $escaped = $output -replace "`r`n", "\n" -replace "`n", "\n" -replace "`r", ""
           $truncated = $escaped.Substring(0, [Math]::Min(500, $escaped.Length))
+
+          echo "=== Escaped出力（最初の500文字） ==="
+          echo $truncated
 
           Write-Host "##vso[task.setvariable variable=TF_ERROR_OUTPUT]$truncated"
 
@@ -89,7 +102,7 @@ stages:
         targetType: 'inline'
         script: |
           Write-Host "=== デバッグ：TF_ERROR_OUTPUT 確認 ==="
-          Write-Host $env:TF_ERROR_OUTPUT
+          Write-Host "TF_ERROR_OUTPUT: $env:TF_ERROR_OUTPUT"
 
           $webhookUrl = $env:SLACK_WEBHOOK_URL
           if (-not $webhookUrl) {
@@ -102,7 +115,6 @@ stages:
             $errorOutput = "エラー出力が取得できませんでした。"
           }
 
-          # エスケープ用のバッククォート記号を変数化
           $backtick3 = '```'
           $textBlock = "$backtick3$errorOutput$backtick3"
 
