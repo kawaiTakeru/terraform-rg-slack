@@ -29,12 +29,23 @@ stages:
           cd terraform
           terraform init
 
-          # 出力とエラーを配列で取得してから結合
-          $output = & { terraform apply -auto-approve } *>&1
+          # 一時ファイルに出力をリダイレクト（出力 + エラー）
+          $tempFile = "$env:AGENT_TEMPDIRECTORY\tf_output.log"
+          if (Test-Path $tempFile) { Remove-Item $tempFile -Force }
+
+          Start-Process -FilePath "terraform" `
+                        -ArgumentList "apply", "-auto-approve" `
+                        -RedirectStandardOutput $tempFile `
+                        -RedirectStandardError $tempFile `
+                        -NoNewWindow -Wait
           $exitCode = $LASTEXITCODE
 
-          # エラーメッセージを1つの文字列として整形
-          $escaped = $output -join "`n" -replace "`r", ""
+          # ファイルから出力を取得
+          $output = Get-Content $tempFile -Raw
+          Remove-Item $tempFile -Force
+
+          # エスケープ処理と短縮（Slack用）
+          $escaped = $output -replace "`r`n", "\n" -replace "`n", "\n" -replace "`r", ""
           $truncated = $escaped.Substring(0, [Math]::Min(500, $escaped.Length))
 
           Write-Host "##vso[task.setvariable variable=TF_ERROR_OUTPUT]$truncated"
