@@ -75,6 +75,9 @@ stages:
       inputs:
         targetType: 'inline'
         script: |
+          Write-Host "=== デバッグ：TF_ERROR_OUTPUT 確認 ==="
+          Write-Host $env:TF_ERROR_OUTPUT
+
           $webhookUrl = $env:SLACK_WEBHOOK_URL
           if (-not $webhookUrl) {
             Write-Error "❌ SLACK_WEBHOOK_URL が空です。"
