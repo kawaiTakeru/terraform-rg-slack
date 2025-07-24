@@ -2,11 +2,11 @@ trigger: none
 pr: none
 
 pool:
-  name: Default
+  name: Default  # 自身の Self-hosted Agent 名に変更
 
 variables:
   - name: System.Debug
-    value: 'true'
+    value: 'true'  # デバッグログを有効化（任意）
 
 stages:
 - stage: TerraformAndNotify
@@ -20,6 +20,11 @@ stages:
         terraform init
         terraform apply -auto-approve
       displayName: 'TerraformでRG作成'
+      env:
+        ARM_CLIENT_ID: $(ARM_CLIENT_ID)
+        ARM_CLIENT_SECRET: $(ARM_CLIENT_SECRET)
+        ARM_SUBSCRIPTION_ID: $(ARM_SUBSCRIPTION_ID)
+        ARM_TENANT_ID: $(ARM_TENANT_ID)
 
     - task: PowerShell@2
       displayName: 'Slack通知'
@@ -52,4 +57,3 @@ stages:
           }
       env:
         SLACK_WEBHOOK_URL: $(SLACK_WEBHOOK_URL)
-
