@@ -43,12 +43,19 @@ stages:
           $exitCode = $LASTEXITCODE
 
           echo "=== Terraform Apply 終了（ExitCode: $exitCode） ==="
-          echo "=== 出力ファイル存在確認 ==="
+
           $stdout = if (Test-Path $stdoutFile) { Get-Content $stdoutFile -Raw } else { "" }
           $stderr = if (Test-Path $stderrFile) { Get-Content $stderrFile -Raw } else { "" }
           $output = "$stdout`n$stderr"
 
           Remove-Item $stdoutFile, $stderrFile -Force -ErrorAction SilentlyContinue
+
+          echo "=== 出力デバッグ ==="
+          echo "stderr に 'Error:' を含むかチェック"
+          $hasError = $stderr -match "Error:"
+
+          echo "ExitCode: $exitCode"
+          echo "hasError: $hasError"
 
           $escaped = $output -replace "`r`n", "\n" -replace "`n", "\n" -replace "`r", ""
           $truncated = $escaped.Substring(0, [Math]::Min(500, $escaped.Length))
@@ -58,11 +65,11 @@ stages:
 
           Write-Host "##vso[task.setvariable variable=TF_ERROR_OUTPUT]$truncated"
 
-          if ($exitCode -eq 0) {
-            Write-Host "##vso[task.setvariable variable=TF_RESULT]success"
-          } else {
+          if ($exitCode -ne 0 -or $hasError) {
             Write-Host "##vso[task.setvariable variable=TF_RESULT]failed"
             exit 1
+          } else {
+            Write-Host "##vso[task.setvariable variable=TF_RESULT]success"
           }
       env:
         ARM_CLIENT_ID: $(ARM_CLIENT_ID)
