@@ -2,7 +2,7 @@ trigger: none
 pr: none
 
 pool:
-  name: Default  # Self-hosted Agent名に合わせて変更
+  name: Default  # ← Self-hosted Agent名にあわせて変更
 
 variables:
   - name: System.Debug
@@ -29,16 +29,21 @@ stages:
           cd terraform
           terraform init
           terraform apply -auto-approve
+          if ($LASTEXITCODE -eq 0) {
+            echo "##vso[task.setvariable variable=TF_RESULT]success"
+          } else {
+            echo "##vso[task.setvariable variable=TF_RESULT]failed"
+            exit 1
+          }
       env:
         ARM_CLIENT_ID: $(ARM_CLIENT_ID)
         ARM_CLIENT_SECRET: $(ARM_CLIENT_SECRET)
         ARM_SUBSCRIPTION_ID: $(ARM_SUBSCRIPTION_ID)
         ARM_TENANT_ID: $(ARM_TENANT_ID)
 
-    # 成功時のSlack通知
     - task: PowerShell@2
       displayName: 'Slack通知（成功）'
-      condition: succeeded()
+      condition: and(succeeded(), eq(variables['TF_RESULT'], 'success'))
       inputs:
         targetType: 'inline'
         script: |
@@ -48,13 +53,14 @@ stages:
             exit 1
           }
 
-          $message = @{ text = "✅ リソースグループ作成完了（terraform apply）" } | ConvertTo-Json -Compress
+          $payload = @{ text = "✅ リソースグループ作成が完了しました（terraform apply）✅" } | ConvertTo-Json -Compress
           $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
-          $body = $utf8NoBom.GetBytes($message)
+          $body = $utf8NoBom.GetBytes($payload)
 
           Invoke-RestMethod -Uri $webhookUrl -Method POST -Body $body -ContentType 'application/json'
+      env:
+        SLACK_WEBHOOK_URL: $(SLACK_WEBHOOK_URL)
 
-    # 失敗時のSlack通知
     - task: PowerShell@2
       displayName: 'Slack通知（失敗）'
       condition: failed()
@@ -67,9 +73,9 @@ stages:
             exit 1
           }
 
-          $message = @{ text = "❌ リソースグループ作成に失敗しました（terraform apply）" } | ConvertTo-Json -Compress
+          $payload = @{ text = "❌ リソースグループ作成に失敗しました（terraform apply）" } | ConvertTo-Json -Compress
           $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
-          $body = $utf8NoBom.GetBytes($message)
+          $body = $utf8NoBom.GetBytes($payload)
 
           Invoke-RestMethod -Uri $webhookUrl -Method POST -Body $body -ContentType 'application/json'
       env:
