@@ -57,20 +57,20 @@ stages:
           echo "ExitCode: $exitCode"
           echo "hasError: $hasError"
 
-          # エラー出力抽出処理
-          if ($hasError) {
-            $lines = $output -split "`n"
-            $matchedIndex = ($lines | Select-String -Pattern "Error:" -SimpleMatch).LineNumber
-            $start = [Math]::Max(0, $matchedIndex - 3)
-            $end = [Math]::Min($lines.Count - 1, $matchedIndex + 5)
-            $snippet = $lines[$start..$end] -join "`n"
-            $finalOutput = $snippet
-          } else {
-            $finalOutput = ($output -split "`n" | Select-Object -First 20) -join "`n"
+          $lines = $output -split "`n"
+          $cleanLines = $lines -replace "`e\[[\d;]*[a-zA-Z]", "" -replace "\[\d{1,2}m", ""
+          $filtered = $cleanLines | Where-Object { $_ -match "Error:" -or $_ -match "^\s+at\s+|resource\s+" }
+          $snippet = ($filtered | Select-Object -First 10) -join "`n"
+
+          if (-not $snippet) {
+            $snippet = ($cleanLines | Select-Object -First 20) -join "`n"
           }
 
-          $escaped = $finalOutput -replace "`r`n", "\n" -replace "`n", "\n" -replace "`r", ""
+          $escaped = $snippet -replace "`r`n", "\n" -replace "`n", "\n" -replace "`r", ""
           $truncated = $escaped.Substring(0, [Math]::Min(500, $escaped.Length))
+
+          Write-Host "=== エラー抜粋（最初の500文字） ==="
+          Write-Host $truncated
           Write-Host "##vso[task.setvariable variable=TF_ERROR_OUTPUT]$truncated"
 
           if ($exitCode -ne 0 -or $hasError) {
@@ -88,6 +88,8 @@ stages:
     - task: PowerShell@2
       displayName: 'Slack通知（成功）'
       condition: and(succeeded(), eq(variables['TF_RESULT'], 'success'))
+      env:
+        SLACK_WEBHOOK_URL: $(SLACK_WEBHOOK_URL)
       inputs:
         targetType: 'inline'
         script: |
@@ -102,12 +104,12 @@ stages:
           $body = $utf8.GetBytes($payload)
 
           Invoke-RestMethod -Uri $webhookUrl -Method POST -Body $body -ContentType 'application/json'
-      env:
-        SLACK_WEBHOOK_URL: $(SLACK_WEBHOOK_URL)
 
     - task: PowerShell@2
       displayName: 'Slack通知（失敗）'
       condition: failed()
+      env:
+        SLACK_WEBHOOK_URL: $(SLACK_WEBHOOK_URL)
       inputs:
         targetType: 'inline'
         script: |
@@ -142,5 +144,3 @@ stages:
           $body = $utf8.GetBytes($payload)
 
           Invoke-RestMethod -Uri $webhookUrl -Method POST -Body $body -ContentType 'application/json'
-      env:
-        SLACK_WEBHOOK_URL: $(SLACK_WEBHOOK_URL)
