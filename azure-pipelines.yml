@@ -25,6 +25,7 @@ stages:
           echo "TENANT_ID: $env:ARM_TENANT_ID"
           echo "SUBSCRIPTION_ID: $env:ARM_SUBSCRIPTION_ID"
           echo "CLIENT_SECRET: $env:ARM_CLIENT_SECRET"
+
           cd terraform
           terraform init
           terraform apply -auto-approve
@@ -34,33 +35,42 @@ stages:
         ARM_SUBSCRIPTION_ID: $(ARM_SUBSCRIPTION_ID)
         ARM_TENANT_ID: $(ARM_TENANT_ID)
 
+    # 成功時のSlack通知
     - task: PowerShell@2
-      displayName: 'Slack通知'
+      displayName: 'Slack通知（成功）'
       condition: succeeded()
       inputs:
         targetType: 'inline'
         script: |
           $webhookUrl = $env:SLACK_WEBHOOK_URL
-
           if (-not $webhookUrl) {
             Write-Error "❌ SLACK_WEBHOOK_URL が空です。Pipeline の変数を確認してください。"
             exit 1
           }
 
-          $payload = @{ text = "✅ リソースグループ作成成功（terraform apply）✅" } | ConvertTo-Json -Compress
+          $message = @{ text = "✅ リソースグループ作成完了（terraform apply）" } | ConvertTo-Json -Compress
+          $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+          $body = $utf8NoBom.GetBytes($message)
 
-          try {
-            $response = Invoke-RestMethod `
-              -Uri $webhookUrl `
-              -Method POST `
-              -Body $payload `
-              -ContentType 'application/json' `
-              -ErrorAction Stop
+          Invoke-RestMethod -Uri $webhookUrl -Method POST -Body $body -ContentType 'application/json'
 
-            Write-Host "✅ Slack通知成功: $($response | Out-String)"
-          } catch {
-            Write-Error "❌ Slack通知失敗: $_"
+    # 失敗時のSlack通知
+    - task: PowerShell@2
+      displayName: 'Slack通知（失敗）'
+      condition: failed()
+      inputs:
+        targetType: 'inline'
+        script: |
+          $webhookUrl = $env:SLACK_WEBHOOK_URL
+          if (-not $webhookUrl) {
+            Write-Error "❌ SLACK_WEBHOOK_URL が空です。Pipeline の変数を確認してください。"
             exit 1
           }
+
+          $message = @{ text = "❌ リソースグループ作成に失敗しました（terraform apply）" } | ConvertTo-Json -Compress
+          $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+          $body = $utf8NoBom.GetBytes($message)
+
+          Invoke-RestMethod -Uri $webhookUrl -Method POST -Body $body -ContentType 'application/json'
       env:
         SLACK_WEBHOOK_URL: $(SLACK_WEBHOOK_URL)
