@@ -28,8 +28,13 @@ stages:
 
           cd terraform
           terraform init
-          terraform apply -auto-approve
-          if ($LASTEXITCODE -eq 0) {
+          $output = terraform apply -auto-approve 2>&1
+          $exitCode = $LASTEXITCODE
+
+          # 出力内容を一時ファイルに保存（後段に渡す）
+          Set-Content -Path "$(System.DefaultWorkingDirectory)\tf_output.txt" -Value $output
+
+          if ($exitCode -eq 0) {
             echo "##vso[task.setvariable variable=TF_RESULT]success"
           } else {
             echo "##vso[task.setvariable variable=TF_RESULT]failed"
@@ -73,7 +78,22 @@ stages:
             exit 1
           }
 
-          $payload = @{ text = "❌ リソースグループ作成に失敗しました（terraform apply）" } | ConvertTo-Json -Compress
+          $tfOutputFile = "$(System.DefaultWorkingDirectory)\tf_output.txt"
+          $output = Get-Content $tfOutputFile -Raw
+
+          # 長すぎるとSlackに送れないので、先頭500文字だけ送信
+          $shortOutput = $output.Substring(0, [Math]::Min(500, $output.Length))
+
+          $payload = @{
+            text = "❌ リソースグループ作成に失敗しました（terraform apply）"
+            attachments = @(
+              @{
+                color = "danger"
+                text = "```$shortOutput```"
+              }
+            )
+          } | ConvertTo-Json -Depth 10 -Compress
+
           $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
           $body = $utf8NoBom.GetBytes($payload)
 
