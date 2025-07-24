@@ -86,12 +86,16 @@ stages:
             $errorOutput = "エラー出力が取得できませんでした。"
           }
 
+          # エスケープ用のバッククォート記号を変数化
+          $backtick3 = '```'
+          $textBlock = "$backtick3$errorOutput$backtick3"
+
           $payload = @{
             text = "❌ リソースグループ作成に失敗しました（terraform apply）"
             attachments = @(
               @{
                 color = "danger"
-                text = "```$errorOutput```"
+                text = $textBlock
               }
             )
           } | ConvertTo-Json -Depth 10 -Compress
