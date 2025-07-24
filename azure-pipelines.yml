@@ -57,12 +57,20 @@ stages:
           echo "ExitCode: $exitCode"
           echo "hasError: $hasError"
 
-          $escaped = $output -replace "`r`n", "\n" -replace "`n", "\n" -replace "`r", ""
+          # エラー出力抽出処理
+          if ($hasError) {
+            $lines = $output -split "`n"
+            $matchedIndex = ($lines | Select-String -Pattern "Error:" -SimpleMatch).LineNumber
+            $start = [Math]::Max(0, $matchedIndex - 3)
+            $end = [Math]::Min($lines.Count - 1, $matchedIndex + 5)
+            $snippet = $lines[$start..$end] -join "`n"
+            $finalOutput = $snippet
+          } else {
+            $finalOutput = ($output -split "`n" | Select-Object -First 20) -join "`n"
+          }
+
+          $escaped = $finalOutput -replace "`r`n", "\n" -replace "`n", "\n" -replace "`r", ""
           $truncated = $escaped.Substring(0, [Math]::Min(500, $escaped.Length))
-
-          echo "=== Escaped出力（最初の500文字） ==="
-          echo $truncated
-
           Write-Host "##vso[task.setvariable variable=TF_ERROR_OUTPUT]$truncated"
 
           if ($exitCode -ne 0 -or $hasError) {
