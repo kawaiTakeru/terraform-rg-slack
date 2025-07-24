@@ -29,20 +29,19 @@ stages:
           cd terraform
           terraform init
 
-          # 一時ログファイルのパス
-          $logFile = "$(System.DefaultWorkingDirectory)\tf_output.txt"
+          # terraform apply の結果をキャプチャ
+          $output = terraform apply -auto-approve 2>&1
+          $exitCode = $LASTEXITCODE
 
-          # terraform apply 実行 + 出力をファイルにリダイレクト
-          Start-Process -FilePath "terraform" `
-                        -ArgumentList "apply -auto-approve" `
-                        -RedirectStandardOutput $logFile `
-                        -RedirectStandardError $logFile `
-                        -NoNewWindow -Wait
+          # 出力を環境変数に保存（失敗時用）
+          $escaped = $output -replace "`r`n", "\n" -replace "`n", "\n" -replace "`r", ""
+          $truncated = $escaped.Substring(0, [Math]::Min(500, $escaped.Length))
+          Write-Host "##vso[task.setvariable variable=TF_ERROR_OUTPUT]$truncated"
 
-          if ($LASTEXITCODE -eq 0) {
-            echo "##vso[task.setvariable variable=TF_RESULT]success"
+          if ($exitCode -eq 0) {
+            Write-Host "##vso[task.setvariable variable=TF_RESULT]success"
           } else {
-            echo "##vso[task.setvariable variable=TF_RESULT]failed"
+            Write-Host "##vso[task.setvariable variable=TF_RESULT]failed"
             exit 1
           }
       env:
@@ -83,12 +82,9 @@ stages:
             exit 1
           }
 
-          $tfOutputFile = "$(System.DefaultWorkingDirectory)\tf_output.txt"
-          if (Test-Path $tfOutputFile) {
-            $output = Get-Content $tfOutputFile -Raw
-            $shortOutput = $output.Substring(0, [Math]::Min(500, $output.Length))
-          } else {
-            $shortOutput = "出力ファイルが見つかりませんでした。"
+          $errorOutput = "$(TF_ERROR_OUTPUT)"
+          if (-not $errorOutput) {
+            $errorOutput = "エラー出力が取得できませんでした。"
           }
 
           $payload = @{
@@ -96,7 +92,7 @@ stages:
             attachments = @(
               @{
                 color = "danger"
-                text = "```$shortOutput```"
+                text = "```$errorOutput```"
               }
             )
           } | ConvertTo-Json -Depth 10 -Compress
