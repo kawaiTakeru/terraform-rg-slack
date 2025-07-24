@@ -29,31 +29,26 @@ stages:
           cd terraform
           terraform init
 
-          $tempFile = "$env:AGENT_TEMPDIRECTORY\tf_output.log"
-          if (Test-Path $tempFile) { Remove-Item $tempFile -Force }
+          $stdoutFile = "$env:AGENT_TEMPDIRECTORY\tf_stdout.log"
+          $stderrFile = "$env:AGENT_TEMPDIRECTORY\tf_stderr.log"
+          if (Test-Path $stdoutFile) { Remove-Item $stdoutFile -Force }
+          if (Test-Path $stderrFile) { Remove-Item $stderrFile -Force }
 
           echo "=== Terraform Apply 実行中 ==="
           Start-Process -FilePath "terraform" `
                         -ArgumentList "apply", "-auto-approve" `
-                        -RedirectStandardOutput $tempFile `
-                        -RedirectStandardError $tempFile `
+                        -RedirectStandardOutput $stdoutFile `
+                        -RedirectStandardError $stderrFile `
                         -NoNewWindow -Wait
           $exitCode = $LASTEXITCODE
 
           echo "=== Terraform Apply 終了（ExitCode: $exitCode） ==="
           echo "=== 出力ファイル存在確認 ==="
-          if (Test-Path $tempFile) {
-            echo "出力ファイルあり：$tempFile"
-            $output = Get-Content $tempFile -Raw
-            echo "=== ファイル読み取り完了 ==="
-            echo "▼ RAW出力（最初の500文字）▼"
-            echo $output.Substring(0, [Math]::Min(500, $output.Length))
-          } else {
-            echo "❌ 出力ファイルが存在しません"
-            $output = ""
-          }
+          $stdout = if (Test-Path $stdoutFile) { Get-Content $stdoutFile -Raw } else { "" }
+          $stderr = if (Test-Path $stderrFile) { Get-Content $stderrFile -Raw } else { "" }
+          $output = "$stdout`n$stderr"
 
-          Remove-Item $tempFile -Force -ErrorAction SilentlyContinue
+          Remove-Item $stdoutFile, $stderrFile -Force -ErrorAction SilentlyContinue
 
           $escaped = $output -replace "`r`n", "\n" -replace "`n", "\n" -replace "`r", ""
           $truncated = $escaped.Substring(0, [Math]::Min(500, $escaped.Length))
