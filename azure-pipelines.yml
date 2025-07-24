@@ -1,1 +1,55 @@
+trigger: none
+pr: none
+
+pool:
+  name: Default
+
+variables:
+  - name: System.Debug
+    value: 'true'
+
+stages:
+- stage: TerraformAndNotify
+  displayName: 'Terraform実行とSlack通知'
+  jobs:
+  - job: ApplyAndNotify
+    displayName: 'RG作成 + Slack通知'
+    steps:
+    - script: |
+        cd terraform
+        terraform init
+        terraform apply -auto-approve
+      displayName: 'TerraformでRG作成'
+
+    - task: PowerShell@2
+      displayName: 'Slack通知'
+      condition: succeeded()
+      inputs:
+        targetType: 'inline'
+        pwsh: true
+        script: |
+          $webhookUrl = $env:SLACK_WEBHOOK_URL
+
+          if (-not $webhookUrl) {
+            Write-Error "❌ SLACK_WEBHOOK_URL が空です。Pipeline の変数を確認してください。"
+            exit 1
+          }
+
+          $payload = @{ text = "✅ リソースグループ作成成功（terraform apply）✅" } | ConvertTo-Json -Compress
+
+          try {
+            $response = Invoke-RestMethod `
+              -Uri $webhookUrl `
+              -Method POST `
+              -Body $payload `
+              -ContentType 'application/json' `
+              -ErrorAction Stop
+
+            Write-Host "✅ Slack通知成功: $($response | Out-String)"
+          } catch {
+            Write-Error "❌ Slack通知失敗: $_"
+            exit 1
+          }
+      env:
+        SLACK_WEBHOOK_URL: $(SLACK_WEBHOOK_URL)
 
