@@ -28,13 +28,18 @@ stages:
 
           cd terraform
           terraform init
-          $output = terraform apply -auto-approve 2>&1
-          $exitCode = $LASTEXITCODE
 
-          # 出力内容を一時ファイルに保存（後段に渡す）
-          Set-Content -Path "$(System.DefaultWorkingDirectory)\tf_output.txt" -Value $output
+          # 一時ログファイルのパス
+          $logFile = "$(System.DefaultWorkingDirectory)\tf_output.txt"
 
-          if ($exitCode -eq 0) {
+          # terraform apply 実行 + 出力をファイルにリダイレクト
+          Start-Process -FilePath "terraform" `
+                        -ArgumentList "apply -auto-approve" `
+                        -RedirectStandardOutput $logFile `
+                        -RedirectStandardError $logFile `
+                        -NoNewWindow -Wait
+
+          if ($LASTEXITCODE -eq 0) {
             echo "##vso[task.setvariable variable=TF_RESULT]success"
           } else {
             echo "##vso[task.setvariable variable=TF_RESULT]failed"
@@ -79,10 +84,12 @@ stages:
           }
 
           $tfOutputFile = "$(System.DefaultWorkingDirectory)\tf_output.txt"
-          $output = Get-Content $tfOutputFile -Raw
-
-          # 長すぎるとSlackに送れないので、先頭500文字だけ送信
-          $shortOutput = $output.Substring(0, [Math]::Min(500, $output.Length))
+          if (Test-Path $tfOutputFile) {
+            $output = Get-Content $tfOutputFile -Raw
+            $shortOutput = $output.Substring(0, [Math]::Min(500, $output.Length))
+          } else {
+            $shortOutput = "出力ファイルが見つかりませんでした。"
+          }
 
           $payload = @{
             text = "❌ リソースグループ作成に失敗しました（terraform apply）"
