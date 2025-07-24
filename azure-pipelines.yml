@@ -2,7 +2,7 @@ trigger: none
 pr: none
 
 pool:
-  name: Default  # ← Self-hosted Agent名にあわせて変更
+  name: Default  # ← Self-hosted Agent名
 
 variables:
   - name: System.Debug
@@ -29,11 +29,10 @@ stages:
           cd terraform
           terraform init
 
-          # terraform apply の結果をキャプチャ
           $output = terraform apply -auto-approve 2>&1
           $exitCode = $LASTEXITCODE
 
-          # 出力を環境変数に保存（失敗時用）
+          # エラーメッセージ短縮（最大500文字）
           $escaped = $output -replace "`r`n", "\n" -replace "`n", "\n" -replace "`r", ""
           $truncated = $escaped.Substring(0, [Math]::Min(500, $escaped.Length))
           Write-Host "##vso[task.setvariable variable=TF_ERROR_OUTPUT]$truncated"
@@ -58,13 +57,13 @@ stages:
         script: |
           $webhookUrl = $env:SLACK_WEBHOOK_URL
           if (-not $webhookUrl) {
-            Write-Error "❌ SLACK_WEBHOOK_URL が空です。Pipeline の変数を確認してください。"
+            Write-Error "❌ SLACK_WEBHOOK_URL が空です。"
             exit 1
           }
 
           $payload = @{ text = "✅ リソースグループ作成が完了しました（terraform apply）✅" } | ConvertTo-Json -Compress
-          $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
-          $body = $utf8NoBom.GetBytes($payload)
+          $utf8 = New-Object System.Text.UTF8Encoding($false)
+          $body = $utf8.GetBytes($payload)
 
           Invoke-RestMethod -Uri $webhookUrl -Method POST -Body $body -ContentType 'application/json'
       env:
@@ -78,11 +77,11 @@ stages:
         script: |
           $webhookUrl = $env:SLACK_WEBHOOK_URL
           if (-not $webhookUrl) {
-            Write-Error "❌ SLACK_WEBHOOK_URL が空です。Pipeline の変数を確認してください。"
+            Write-Error "❌ SLACK_WEBHOOK_URL が空です。"
             exit 1
           }
 
-          $errorOutput = "$(TF_ERROR_OUTPUT)"
+          $errorOutput = "${env:TF_ERROR_OUTPUT}"
           if (-not $errorOutput) {
             $errorOutput = "エラー出力が取得できませんでした。"
           }
@@ -97,8 +96,8 @@ stages:
             )
           } | ConvertTo-Json -Depth 10 -Compress
 
-          $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
-          $body = $utf8NoBom.GetBytes($payload)
+          $utf8 = New-Object System.Text.UTF8Encoding($false)
+          $body = $utf8.GetBytes($payload)
 
           Invoke-RestMethod -Uri $webhookUrl -Method POST -Body $body -ContentType 'application/json'
       env:
