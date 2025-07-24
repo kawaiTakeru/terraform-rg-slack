@@ -16,6 +16,11 @@ stages:
     displayName: 'RG作成 + Slack通知'
     steps:
     - script: |
+        echo "=== 環境変数確認 ==="
+        echo "CLIENT_ID: $ARM_CLIENT_ID"
+        echo "TENANT_ID: $ARM_TENANT_ID"
+        echo "SUBSCRIPTION_ID: $ARM_SUBSCRIPTION_ID"
+        echo "CLIENT_SECRET: $ARM_CLIENT_SECRET"
         cd terraform
         terraform init
         terraform apply -auto-approve
