@@ -29,12 +29,14 @@ stages:
           cd terraform
           terraform init
 
-          $output = terraform apply -auto-approve 2>&1
+          # 出力とエラーを配列で取得してから結合
+          $output = & { terraform apply -auto-approve } *>&1
           $exitCode = $LASTEXITCODE
 
-          # エラーメッセージ短縮
-          $escaped = $output -replace "`r`n", "\n" -replace "`n", "\n" -replace "`r", ""
+          # エラーメッセージを1つの文字列として整形
+          $escaped = $output -join "`n" -replace "`r", ""
           $truncated = $escaped.Substring(0, [Math]::Min(500, $escaped.Length))
+
           Write-Host "##vso[task.setvariable variable=TF_ERROR_OUTPUT]$truncated"
 
           if ($exitCode -eq 0) {
