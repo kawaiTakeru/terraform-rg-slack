@@ -2,11 +2,11 @@ trigger: none
 pr: none
 
 pool:
-  name: Default  # 自身の Self-hosted Agent 名に変更
+  name: Default  # Self-hosted Agent名に合わせて変更
 
 variables:
   - name: System.Debug
-    value: 'true'  # デバッグログを有効化（任意）
+    value: 'true'
 
 stages:
 - stage: TerraformAndNotify
@@ -15,16 +15,19 @@ stages:
   - job: ApplyAndNotify
     displayName: 'RG作成 + Slack通知'
     steps:
-    - script: |
-        echo "=== 環境変数確認 ==="
-        echo "CLIENT_ID: $ARM_CLIENT_ID"
-        echo "TENANT_ID: $ARM_TENANT_ID"
-        echo "SUBSCRIPTION_ID: $ARM_SUBSCRIPTION_ID"
-        echo "CLIENT_SECRET: $ARM_CLIENT_SECRET"
-        cd terraform
-        terraform init
-        terraform apply -auto-approve
+    - task: PowerShell@2
       displayName: 'TerraformでRG作成'
+      inputs:
+        targetType: 'inline'
+        script: |
+          echo "=== 環境変数確認 ==="
+          echo "CLIENT_ID: $env:ARM_CLIENT_ID"
+          echo "TENANT_ID: $env:ARM_TENANT_ID"
+          echo "SUBSCRIPTION_ID: $env:ARM_SUBSCRIPTION_ID"
+          echo "CLIENT_SECRET: $env:ARM_CLIENT_SECRET"
+          cd terraform
+          terraform init
+          terraform apply -auto-approve
       env:
         ARM_CLIENT_ID: $(ARM_CLIENT_ID)
         ARM_CLIENT_SECRET: $(ARM_CLIENT_SECRET)
@@ -36,7 +39,6 @@ stages:
       condition: succeeded()
       inputs:
         targetType: 'inline'
-        pwsh: true
         script: |
           $webhookUrl = $env:SLACK_WEBHOOK_URL
 
