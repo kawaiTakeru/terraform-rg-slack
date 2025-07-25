@@ -2,83 +2,28 @@ trigger: none
 pr: none
 
 pool:
-  name: Default  # ← Self-hosted Agent名
+  name: Default
 
 variables:
   - name: System.Debug
     value: 'true'
 
 stages:
-- stage: TerraformAndNotify
-  displayName: 'Terraform実行とSlack通知'
+# ──────────────────────
+- stage: Stage1_RG
+  displayName: 'Stage 1: RG作成 + Slack通知'
   jobs:
-  - job: ApplyAndNotify
-    displayName: 'RG作成 + Slack通知'
+  - job: ApplyRG
+    displayName: 'RG作成 + 通知'
     steps:
     - task: PowerShell@2
       displayName: 'TerraformでRG作成'
       inputs:
         targetType: 'inline'
         script: |
-          echo "=== 環境変数確認 ==="
-          echo "CLIENT_ID: $env:ARM_CLIENT_ID"
-          echo "TENANT_ID: $env:ARM_TENANT_ID"
-          echo "SUBSCRIPTION_ID: $env:ARM_SUBSCRIPTION_ID"
-          echo "CLIENT_SECRET: $env:ARM_CLIENT_SECRET"
-
-          cd terraform
+          cd terraform/stage1-rg
           terraform init
-
-          $stdoutFile = "$env:AGENT_TEMPDIRECTORY\tf_stdout.log"
-          $stderrFile = "$env:AGENT_TEMPDIRECTORY\tf_stderr.log"
-          if (Test-Path $stdoutFile) { Remove-Item $stdoutFile -Force }
-          if (Test-Path $stderrFile) { Remove-Item $stderrFile -Force }
-
-          echo "=== Terraform Apply 実行中 ==="
-          Start-Process -FilePath "terraform" `
-                        -ArgumentList "apply", "-auto-approve" `
-                        -RedirectStandardOutput $stdoutFile `
-                        -RedirectStandardError $stderrFile `
-                        -NoNewWindow -Wait
-          $exitCode = $LASTEXITCODE
-
-          echo "=== Terraform Apply 終了（ExitCode: $exitCode） ==="
-
-          $stdout = if (Test-Path $stdoutFile) { Get-Content $stdoutFile -Raw } else { "" }
-          $stderr = if (Test-Path $stderrFile) { Get-Content $stderrFile -Raw } else { "" }
-          $output = "$stdout`n$stderr"
-
-          Remove-Item $stdoutFile, $stderrFile -Force -ErrorAction SilentlyContinue
-
-          echo "=== 出力デバッグ ==="
-          echo "stderr に 'Error:' を含むかチェック"
-          $hasError = $stderr -match "Error:"
-
-          echo "ExitCode: $exitCode"
-          echo "hasError: $hasError"
-
-          $lines = $output -split "`n"
-          $cleanLines = $lines -replace "`e\[[\d;]*[a-zA-Z]", "" -replace "\[\d{1,2}m", ""
-          $filtered = $cleanLines | Where-Object { $_ -match "Error:" -or $_ -match "^\s+at\s+|resource\s+" }
-          $snippet = ($filtered | Select-Object -First 10) -join "`n"
-
-          if (-not $snippet) {
-            $snippet = ($cleanLines | Select-Object -First 20) -join "`n"
-          }
-
-          $escaped = $snippet -replace "`r`n", "\n" -replace "`n", "\n" -replace "`r", ""
-          $truncated = $escaped.Substring(0, [Math]::Min(500, $escaped.Length))
-
-          Write-Host "=== エラー抜粋（最初の500文字） ==="
-          Write-Host $truncated
-          Write-Host "##vso[task.setvariable variable=TF_ERROR_OUTPUT]$truncated"
-
-          if ($exitCode -ne 0 -or $hasError) {
-            Write-Host "##vso[task.setvariable variable=TF_RESULT]failed"
-            exit 1
-          } else {
-            Write-Host "##vso[task.setvariable variable=TF_RESULT]success"
-          }
+          terraform apply -auto-approve
       env:
         ARM_CLIENT_ID: $(ARM_CLIENT_ID)
         ARM_CLIENT_SECRET: $(ARM_CLIENT_SECRET)
@@ -87,23 +32,16 @@ stages:
 
     - task: PowerShell@2
       displayName: 'Slack通知（成功）'
-      condition: and(succeeded(), eq(variables['TF_RESULT'], 'success'))
+      condition: succeeded()
       env:
         SLACK_WEBHOOK_URL: $(SLACK_WEBHOOK_URL)
       inputs:
         targetType: 'inline'
         script: |
-          $webhookUrl = $env:SLACK_WEBHOOK_URL
-          if (-not $webhookUrl) {
-            Write-Error "❌ SLACK_WEBHOOK_URL が空です。"
-            exit 1
-          }
-
-          $payload = @{ text = "✅ リソースグループ作成が完了しました（terraform apply）✅" } | ConvertTo-Json -Compress
+          $payload = @{ text = "✅ リソースグループ作成が完了しました（stage1）✅" } | ConvertTo-Json -Compress
           $utf8 = New-Object System.Text.UTF8Encoding($false)
           $body = $utf8.GetBytes($payload)
-
-          Invoke-RestMethod -Uri $webhookUrl -Method POST -Body $body -ContentType 'application/json'
+          Invoke-RestMethod -Uri $env:SLACK_WEBHOOK_URL -Method POST -Body $body -ContentType 'application/json'
 
     - task: PowerShell@2
       displayName: 'Slack通知（失敗）'
@@ -113,34 +51,53 @@ stages:
       inputs:
         targetType: 'inline'
         script: |
-          Write-Host "=== デバッグ：TF_ERROR_OUTPUT 確認 ==="
-          Write-Host "TF_ERROR_OUTPUT: $env:TF_ERROR_OUTPUT"
-
-          $webhookUrl = $env:SLACK_WEBHOOK_URL
-          if (-not $webhookUrl) {
-            Write-Error "❌ SLACK_WEBHOOK_URL が空です。"
-            exit 1
-          }
-
-          $errorOutput = $env:TF_ERROR_OUTPUT
-          if (-not $errorOutput) {
-            $errorOutput = "エラー出力が取得できませんでした。"
-          }
-
-          $backtick3 = '```'
-          $textBlock = "$backtick3$errorOutput$backtick3"
-
-          $payload = @{
-            text = "❌ リソースグループ作成に失敗しました（terraform apply）"
-            attachments = @(
-              @{
-                color = "danger"
-                text = $textBlock
-              }
-            )
-          } | ConvertTo-Json -Depth 10 -Compress
-
+          $payload = @{ text = "❌ リソースグループ作成に失敗しました（stage1）" } | ConvertTo-Json -Compress
           $utf8 = New-Object System.Text.UTF8Encoding($false)
           $body = $utf8.GetBytes($payload)
+          Invoke-RestMethod -Uri $env:SLACK_WEBHOOK_URL -Method POST -Body $body -ContentType 'application/json'
 
-          Invoke-RestMethod -Uri $webhookUrl -Method POST -Body $body -ContentType 'application/json'
+# ──────────────────────
+- stage: Stage2_VNet
+  displayName: 'Stage 2: VNet作成'
+  dependsOn: Stage1_RG
+  condition: succeeded()
+  jobs:
+  - job: ApplyVNet
+    displayName: 'VNet作成'
+    steps:
+    - task: PowerShell@2
+      displayName: 'TerraformでVNet作成'
+      inputs:
+        targetType: 'inline'
+        script: |
+          cd terraform/stage2-vnet
+          terraform init
+          terraform apply -auto-approve
+      env:
+        ARM_CLIENT_ID: $(ARM_CLIENT_ID)
+        ARM_CLIENT_SECRET: $(ARM_CLIENT_SECRET)
+        ARM_SUBSCRIPTION_ID: $(ARM_SUBSCRIPTION_ID)
+        ARM_TENANT_ID: $(ARM_TENANT_ID)
+
+# ──────────────────────
+- stage: Stage3_Subnet
+  displayName: 'Stage 3: Subnet作成'
+  dependsOn: Stage2_VNet
+  condition: succeeded()
+  jobs:
+  - job: ApplySubnet
+    displayName: 'Subnet作成'
+    steps:
+    - task: PowerShell@2
+      displayName: 'TerraformでSubnet作成'
+      inputs:
+        targetType: 'inline'
+        script: |
+          cd terraform/stage3-subnet
+          terraform init
+          terraform apply -auto-approve
+      env:
+        ARM_CLIENT_ID: $(ARM_CLIENT_ID)
+        ARM_CLIENT_SECRET: $(ARM_CLIENT_SECRET)
+        ARM_SUBSCRIPTION_ID: $(ARM_SUBSCRIPTION_ID)
+        ARM_TENANT_ID: $(ARM_TENANT_ID)
