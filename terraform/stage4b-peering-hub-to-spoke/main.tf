@@ -1,16 +1,23 @@
+# デフォルト: Spoke側
+provider "azurerm" {
+  features {}
+}
+
+# alias: Hub側（別subscription）
 provider "azurerm" {
   alias           = "hub"
   subscription_id = "HUB側のサブスクリプションID"
   features        = {}
 }
 
+# Spoke側のVNet（自分のサブスクリプション）
 data "azurerm_virtual_network" "spoke" {
-  provider            = azurerm.hub
   name                = "vnet-from-pipeline"
   resource_group_name = "rg-from-pipeline"
   subscription_id     = "Spoke側のサブスクリプションID"
 }
 
+# Hub → Spoke のピアリングをHub側に設定
 resource "azurerm_virtual_network_peering" "hub_to_spoke" {
   provider                  = azurerm.hub
   name                      = "hub-to-spoke"
