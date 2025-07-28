@@ -101,3 +101,49 @@ stages:
         ARM_CLIENT_SECRET: $(ARM_CLIENT_SECRET)
         ARM_SUBSCRIPTION_ID: $(ARM_SUBSCRIPTION_ID)
         ARM_TENANT_ID: $(ARM_TENANT_ID)
+
+# ──────────────────────
+- stage: Stage4a_Peering_SpokeToHub
+  displayName: 'Stage 4a: Spoke → Hub ピアリング'
+  dependsOn: Stage3_Subnet
+  condition: succeeded()
+  jobs:
+  - job: PeeringSpokeToHub
+    displayName: 'Spoke → Hub ピアリング作成'
+    steps:
+    - task: PowerShell@2
+      displayName: 'TerraformでSpoke → Hubピアリング作成'
+      inputs:
+        targetType: 'inline'
+        script: |
+          cd terraform/stage4a-peering-spoke-to-hub
+          terraform init
+          terraform apply -auto-approve
+      env:
+        ARM_CLIENT_ID: $(ARM_CLIENT_ID)
+        ARM_CLIENT_SECRET: $(ARM_CLIENT_SECRET)
+        ARM_SUBSCRIPTION_ID: $(ARM_SUBSCRIPTION_ID)  # ← Spoke側
+        ARM_TENANT_ID: $(ARM_TENANT_ID)
+
+# ──────────────────────
+- stage: Stage4b_Peering_HubToSpoke
+  displayName: 'Stage 4b: Hub → Spoke ピアリング'
+  dependsOn: Stage4a_Peering_SpokeToHub
+  condition: succeeded()
+  jobs:
+  - job: PeeringHubToSpoke
+    displayName: 'Hub → Spoke ピアリング作成'
+    steps:
+    - task: PowerShell@2
+      displayName: 'TerraformでHub → Spokeピアリング作成'
+      inputs:
+        targetType: 'inline'
+        script: |
+          cd terraform/stage4b-peering-hub-to-spoke
+          terraform init
+          terraform apply -auto-approve
+      env:
+        ARM_CLIENT_ID: $(ARM_CLIENT_ID)
+        ARM_CLIENT_SECRET: $(ARM_CLIENT_SECRET)
+        ARM_SUBSCRIPTION_ID: 7d1f78e5-bc6c-4018-847f-336ff47b9436  # ← Hub側 明示的に固定
+        ARM_TENANT_ID: $(ARM_TENANT_ID)
