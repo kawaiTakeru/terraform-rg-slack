@@ -5,17 +5,18 @@ provider "azurerm" {
 data "azurerm_virtual_network" "spoke" {
   name                = "vnet-from-pipeline"
   resource_group_name = "rg-from-pipeline"
+  subscription_id     = "6a018b75-55b5-4b68-960d-7328148568aa" # ← Spoke側
 }
 
 data "azurerm_virtual_network" "hub" {
   name                = "vnet-test-hubnw-prd-jpe-001"
   resource_group_name = "rg-test-hubnw-prd-jpe-001"
-  subscription_id     = "HUB側のサブスクリプションID"
+  subscription_id     = "7d1f78e5-bc6c-4018-847f-336ff47b9436" # ← Hub側
 }
 
 resource "azurerm_virtual_network_peering" "spoke_to_hub" {
   name                      = "spoke-to-hub"
-  resource_group_name       = "rg-from-pipeline"
+  resource_group_name       = data.azurerm_virtual_network.spoke.resource_group_name
   virtual_network_name      = data.azurerm_virtual_network.spoke.name
   remote_virtual_network_id = data.azurerm_virtual_network.hub.id
 
