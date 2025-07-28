@@ -1,12 +1,12 @@
 provider "azurerm" {
+  subscription_id = "6a018b75-55b5-4b68-960d-7328148568aa" # Spoke側
   features {}
-  subscription_id = "6a018b75-55b5-4b68-960d-7328148568aa" # ← Spoke側（参照元）
 }
 
 provider "azurerm" {
   alias           = "hub"
-  subscription_id = "7d1f78e5-bc6c-4018-847f-336ff47b9436" # ← Hub側（操作対象）
-  features        = {}
+  subscription_id = "7d1f78e5-bc6c-4018-847f-336ff47b9436" # Hub側
+  features {}
 }
 
 data "azurerm_virtual_network" "spoke" {
