@@ -23,6 +23,6 @@ resource "azurerm_virtual_network_peering" "hub_to_spoke" {
   remote_virtual_network_id = data.azurerm_virtual_network.spoke.id
 
   allow_forwarded_traffic = true
-  allow_gateway_transit   = false
+  allow_gateway_transit   = true
   use_remote_gateways     = false
 }
